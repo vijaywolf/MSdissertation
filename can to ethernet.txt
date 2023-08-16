@@ -1,0 +1,33 @@
+#include "mbed.h"
+#include "EthernetInterface.h"
+#include <cstdio>
+#define PORT 80
+
+
+
+// Define your CAN pins here
+CAN can2(D15, D14);
+CANMessage rxMsg;
+EthernetInterface net;
+SocketAddress dest("192.168.1.2", PORT); // Manually set receiver's IP
+Serial pc(USBTX, USBRX); // Set up serial communication
+FileHandle *mbed::mbed_override_console(int fd) { return &pc; } // Override the console's file descriptor
+int main() {
+    while(1) {
+        //ThisThread::sleep_for(500);
+        can2.read(rxMsg);
+            printf("distance %s cm\n", rxMsg.data);
+
+                    // Send the distance data over Ethernet
+            net.set_network("192.168.1.1", "255.255.255.0", "192.168.1.1"); // Manually set sender's IP
+            net.connect();
+            UDPSocket socket;
+            socket.open(&net);
+            char out_buffer[256]; // Increased buffer size to allow larger messages
+            sprintf(out_buffer, "Measured Distance = %s cm\n", rxMsg.data); // Format the measured distance as a string // Read input from serial monitor
+            nsapi_size_or_error_t r = socket.sendto(dest, out_buffer, strlen(out_buffer) + 1); // Send string length + 1 to include null character
+            printf("Sent %d bytes to %s\n", r, dest.get_ip_address());
+            wait(1);
+        
+    }
+}

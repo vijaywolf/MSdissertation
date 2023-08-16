@@ -1,0 +1,55 @@
+#include "mbed.h"
+#include <cstdio>
+
+#define TRIGGER_PIN D8
+#define ECHO_PIN D7
+#define SOUND_SPEED 0.0343f
+#define CAN_RX D15
+#define CAN_TX D14
+
+DigitalOut trigPin(TRIGGER_PIN);
+InterruptIn echoPin(ECHO_PIN);
+Timer t;
+Timer sendTimer;
+
+volatile float measured_distance = 0.0;
+CAN can(CAN_RX, CAN_TX); // Initialize CAN interface
+
+void rise_handler() {
+    t.reset();
+    t.start();
+}
+
+void fall_handler() {
+    t.stop();
+    measured_distance = t.read_us() * SOUND_SPEED / 2.0;
+    
+}
+
+int main() {
+    trigPin = 0; // Reset the trigger pin
+    echoPin.rise(&rise_handler);
+    echoPin.fall(&fall_handler);
+
+    sendTimer.start();
+
+    while (true) {
+        // Trigger distance measurement every 1000 ms
+        if (sendTimer.read_ms() >= 1000) {
+            sendTimer.reset();
+            trigPin = 1;
+            wait_us(10);
+            trigPin = 0;
+
+            char canData[8];
+            snprintf(canData, sizeof(canData), "%.2f", measured_distance); // Convert distance to string
+            CANMessage msg(1, canData, sizeof(canData)); // Create CAN message
+            if (can.write(msg)) { // Write CAN message
+                printf("CAN message sent: %s\n", canData);
+                printf("Measured Distance = %.2f cm\n", measured_distance);
+            } else {
+                printf("CAN message failed to send.\n");
+            }
+        }
+    }
+}
